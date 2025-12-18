@@ -28,5 +28,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/php-fpm-mysql:${{ env.IMAGE_VERSION }}
-            ${{ secrets.DOCKER_USERNAME }}/php-fpm-mysql:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/php-fpm-mysql:${{ env.IMAGE_VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/php-fpm-mysql:latest
