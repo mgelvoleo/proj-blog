@@ -206,7 +206,7 @@ $posts_result = $posts_query->get_result();
 <body>
     <div class="container">
         <header>
-            <div class="logo">📝 Simple Blog (PHP 8.7)</div>
+            <div class="logo">📝 Simple Blog (PHP 8.7) Updated TEST</div>
             <div class="tagline">Sharing thoughts, one post at a time</div>
         </header>
         
