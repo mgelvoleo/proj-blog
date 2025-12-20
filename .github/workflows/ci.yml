@@ -1,4 +1,4 @@
-name: Blog CI Pipeline
+name: Blog CI/CD Pipeline
 
 on:
   push:
@@ -30,3 +30,52 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/php-fpm-mysql:${{ env.IMAGE_VERSION }}
             ${{ secrets.DOCKERHUB_USERNAME }}/php-fpm-mysql:latest
+
+  deploy-to-kubernetes:
+    needs: build-and-push
+    runs-on: self-hosted  # Your self-hosted runner with kubectl access
+    
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set image version
+        run: echo "IMAGE_VERSION=8.${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Update PHP deployment manifest with new image version
+        run: |
+          # Update PHP deployment with new image tag
+          sed -i "s|image:.*php-fpm-mysql:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/php-fpm-mysql:${{ env.IMAGE_VERSION }}|g" manifest/php/php-deployment.yml
+          
+          # Display the updated manifest for verification
+          echo "=== Updated PHP Deployment ==="
+          cat manifest/php/php-deployment.yml | grep -A 2 "image:"
+
+      - name: Apply PHP deployment changes
+        run: |
+          kubectl apply -f manifest/php/php-deployment.yml
+
+      - name: Wait for deployment rollout
+        run: |
+          kubectl rollout status deployment/php-fpm  -n dev --timeout=5m
+
+      - name: Verify deployment
+        run: |
+          echo "=== Pods Status ==="
+          kubectl get pods -n dev
+          echo ""
+          echo "=== Deployment Info ==="
+          kubectl describe deployment php-fpm -n dev | grep -A 5 "Image:"
+
+  # Optional: Rollback job in case of failure
+  rollback-on-failure:
+    needs: deploy-to-kubernetes
+    runs-on: self-hosted
+    if: failure()
+    
+    steps:
+      - name: Rollback to previous version
+        run: |
+          echo "Deployment failed, rolling back..."
+          kubectl rollout undo deployment/php-fpm -n dev
+          kubectl rollout status deployment/php-fpm -n dev --timeout=3m
