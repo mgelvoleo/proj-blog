@@ -43,7 +43,7 @@ jobs:
         env:
           DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKER_PASS: ${{ secrets.DOCKERHUB_PASSWORD }}
-          IMAGE_NAME: php-fpm
+          IMAGE_NAME: php-fpm-mysql
           KEEP_LAST: 3
         run: |
           TOKEN=$(curl -s -X POST https://hub.docker.com/v2/users/login/ \
