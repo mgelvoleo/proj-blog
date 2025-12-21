@@ -34,7 +34,6 @@ jobs:
   cleanup-old-images:
     runs-on: ubuntu-latest
     needs: build-and-push
-
     steps:
       - name: Install jq
         run: sudo apt-get install -y jq
@@ -43,25 +42,35 @@ jobs:
         env:
           DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKER_PASS: ${{ secrets.DOCKERHUB_PASSWORD }}
-          IMAGE_NAME: php-fpm-mysql
+          IMAGE_NAME: php-fpm-mysql  # Corrected
           KEEP_LAST: 3
         run: |
+          # Get authentication token
           TOKEN=$(curl -s -X POST https://hub.docker.com/v2/users/login/ \
             -H "Content-Type: application/json" \
             -d "{\"username\": \"$DOCKER_USER\", \"password\": \"$DOCKER_PASS\"}" \
             | jq -r .token)
 
+          # Fetch and filter tags (updated pattern)
           TAGS=$(curl -s -H "Authorization: JWT $TOKEN" \
             https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/?page_size=100 \
-            | jq -r '.results[].name' | grep '^v' | sort -V)
+            | jq -r '.results[].name' | grep '^8\.' | sort -V) # Matches 8.x
 
+          # Calculate tags to delete
           DELETE_TAGS=$(echo "$TAGS" | head -n -$KEEP_LAST)
 
+          # Debug output
+          echo "Repository: $DOCKER_USER/$IMAGE_NAME"
+          echo "All version tags: $TAGS"
+          echo "Tags to delete (keeping last $KEEP_LAST): $DELETE_TAGS"
+
+          # Delete tags
           for tag in $DELETE_TAGS; do
             echo "Deleting tag: $tag"
             curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
               https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/$tag/
           done
+          echo "Cleanup completed."
 
   deploy-to-kubernetes:
     needs: build-and-push
