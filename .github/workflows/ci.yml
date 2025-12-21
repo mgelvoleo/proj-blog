@@ -41,9 +41,9 @@ jobs:
 
       - name: Delete old Docker Hub image tags
         env:
-          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASS: ${{ secrets.DOCKER_PASSWORD }}
-          IMAGE_NAME: php-fpm-mysql
+          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_PASS: ${{ secrets.DOCKERHUB_PASSWORD }}
+          IMAGE_NAME: php-fpm
           KEEP_LAST: 3
         run: |
           TOKEN=$(curl -s -X POST https://hub.docker.com/v2/users/login/ \
