@@ -34,6 +34,7 @@ jobs:
   cleanup-old-images:
     runs-on: ubuntu-latest
     needs: build-and-push
+
     steps:
       - name: Install jq
         run: sudo apt-get install -y jq
@@ -48,7 +49,12 @@ jobs:
           TOKEN=$(curl -s -X POST https://hub.docker.com/v2/users/login/ \
             -H "Content-Type: application/json" \
             -d "{\"username\": \"$DOCKER_USER\", \"password\": \"$DOCKER_PASS\"}" \
-            | jq -r .token)
+            | jq -r '.token // empty')
+
+          if [ -z "$TOKEN" ]; then
+            echo "❌ Failed to get Docker Hub token"
+            exit 1
+          fi
 
           TAGS=""
           PAGE=1
@@ -57,7 +63,8 @@ jobs:
             RESPONSE=$(curl -s -H "Authorization: JWT $TOKEN" \
               "https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/?page_size=100&page=$PAGE")
 
-            PAGE_TAGS=$(echo "$RESPONSE" | jq -r '.results[].name')
+            PAGE_TAGS=$(echo "$RESPONSE" | jq -r '.results // [] | .[].name')
+
             [ -z "$PAGE_TAGS" ] && break
 
             TAGS="$TAGS"$'\n'"$PAGE_TAGS"
@@ -66,26 +73,33 @@ jobs:
 
           TAGS=$(echo "$TAGS" | grep '^8\.' | sort -V)
 
-          echo "All version tags:"
+          echo "=== All version tags ==="
           echo "$TAGS"
 
-          if [ "$(echo "$TAGS" | wc -l)" -le "$KEEP_LAST" ]; then
-            echo "Not enough tags to delete. Skipping cleanup."
+          TAG_COUNT=$(echo "$TAGS" | wc -l | tr -d ' ')
+
+          if [ "$TAG_COUNT" -le "$KEEP_LAST" ]; then
+            echo "ℹ️ Not enough tags to delete (found $TAG_COUNT, keeping $KEEP_LAST)"
             exit 0
           fi
 
           DELETE_TAGS=$(echo "$TAGS" | head -n -$KEEP_LAST)
 
+          echo "=== Tags to delete ==="
+          echo "$DELETE_TAGS"
+
           for tag in $DELETE_TAGS; do
-            echo "Deleting tag: $tag"
+            echo "🗑️ Deleting tag: $tag"
             curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
-              https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/$tag/
+              "https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/$tag/"
           done
+
+          echo "✅ Cleanup completed successfully"
 
   deploy-to-kubernetes:
     needs: build-and-push
-    runs-on: self-hosted  # Your self-hosted runner with kubectl access
-    
+    runs-on: self-hosted
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -95,34 +109,27 @@ jobs:
 
       - name: Update PHP deployment manifest with new image version
         run: |
-          # Update PHP deployment with new image tag
           sed -i "s|image:.*php-fpm-mysql:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/php-fpm-mysql:${{ env.IMAGE_VERSION }}|g" manifest/php/php-deployment.yml
-          
-          # Display the updated manifest for verification
+
           echo "=== Updated PHP Deployment ==="
-          cat manifest/php/php-deployment.yml | grep -A 2 "image:"
+          grep -A 2 "image:" manifest/php/php-deployment.yml
 
       - name: Apply PHP deployment changes
-        run: |
-          kubectl apply -f manifest/php/php-deployment.yml
+        run: kubectl apply -f manifest/php/php-deployment.yml
 
       - name: Wait for deployment rollout
-        run: |
-          kubectl rollout status deployment/php-fpm -n dev --timeout=5m
+        run: kubectl rollout status deployment/php-fpm -n dev --timeout=5m
 
       - name: Verify deployment
         run: |
-          echo "=== Pods Status ==="
           kubectl get pods -n dev
-          echo ""
-          echo "=== Deployment Info ==="
           kubectl describe deployment php-fpm -n dev | grep -A 5 "Image:"
 
   rollback-on-failure:
     needs: deploy-to-kubernetes
     runs-on: self-hosted
     if: failure()
-    
+
     steps:
       - name: Rollback to previous version
         run: |
