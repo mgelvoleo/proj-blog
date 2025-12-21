@@ -32,37 +32,36 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/php-fpm-mysql:latest
 
   cleanup-old-images:
-  runs-on: ubuntu-latest
-  needs: build-and-push
+    runs-on: ubuntu-latest
+    needs: build-and-push
 
-  steps:
-    - name: Install jq
-      run: sudo apt-get install -y jq
+    steps:
+      - name: Install jq
+        run: sudo apt-get install -y jq
 
-    - name: Delete old Docker Hub image tags
-      env:
-        DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
-        DOCKER_PASS: ${{ secrets.DOCKER_PASSWORD }}
-        IMAGE_NAME: blog
-        KEEP_LAST: 3
-      run: |
-        TOKEN=$(curl -s -X POST https://hub.docker.com/v2/users/login/ \
-          -H "Content-Type: application/json" \
-          -d "{\"username\": \"$DOCKER_USER\", \"password\": \"$DOCKER_PASS\"}" \
-          | jq -r .token)
+      - name: Delete old Docker Hub image tags
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASS: ${{ secrets.DOCKER_PASSWORD }}
+          IMAGE_NAME: blog
+          KEEP_LAST: 3
+        run: |
+          TOKEN=$(curl -s -X POST https://hub.docker.com/v2/users/login/ \
+            -H "Content-Type: application/json" \
+            -d "{\"username\": \"$DOCKER_USER\", \"password\": \"$DOCKER_PASS\"}" \
+            | jq -r .token)
 
-        TAGS=$(curl -s -H "Authorization: JWT $TOKEN" \
-          https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/?page_size=100 \
-          | jq -r '.results[].name' | grep '^v' | sort -V)
+          TAGS=$(curl -s -H "Authorization: JWT $TOKEN" \
+            https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/?page_size=100 \
+            | jq -r '.results[].name' | grep '^v' | sort -V)
 
-        DELETE_TAGS=$(echo "$TAGS" | head -n -$KEEP_LAST)
+          DELETE_TAGS=$(echo "$TAGS" | head -n -$KEEP_LAST)
 
-        for tag in $DELETE_TAGS; do
-          echo "Deleting tag: $tag"
-          curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
-            https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/$tag/
-        done
-
+          for tag in $DELETE_TAGS; do
+            echo "Deleting tag: $tag"
+            curl -s -X DELETE -H "Authorization: JWT $TOKEN" \
+              https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/$tag/
+          done
 
   deploy-to-kubernetes:
     needs: build-and-push
@@ -90,7 +89,7 @@ jobs:
 
       - name: Wait for deployment rollout
         run: |
-          kubectl rollout status deployment/php-fpm  -n dev --timeout=5m
+          kubectl rollout status deployment/php-fpm -n dev --timeout=5m
 
       - name: Verify deployment
         run: |
@@ -100,7 +99,6 @@ jobs:
           echo "=== Deployment Info ==="
           kubectl describe deployment php-fpm -n dev | grep -A 5 "Image:"
 
-  # Optional: Rollback job in case of failure
   rollback-on-failure:
     needs: deploy-to-kubernetes
     runs-on: self-hosted
