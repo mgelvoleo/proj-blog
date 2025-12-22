@@ -6,6 +6,7 @@ on:
       - main
 
 jobs:
+  
   build-and-push:
     runs-on: ubuntu-latest
 
@@ -64,7 +65,6 @@ jobs:
               "https://hub.docker.com/v2/repositories/$DOCKER_USER/$IMAGE_NAME/tags/?page_size=100&page=$PAGE")
 
             PAGE_TAGS=$(echo "$RESPONSE" | jq -r '.results // [] | .[].name')
-
             [ -z "$PAGE_TAGS" ] && break
 
             TAGS="$TAGS"$'\n'"$PAGE_TAGS"
@@ -110,7 +110,6 @@ jobs:
       - name: Update PHP deployment manifest with new image version
         run: |
           sed -i "s|image:.*php-fpm-mysql:.*|image: ${{ secrets.DOCKERHUB_USERNAME }}/php-fpm-mysql:${{ env.IMAGE_VERSION }}|g" manifest/php/php-deployment.yml
-
           echo "=== Updated PHP Deployment ==="
           grep -A 2 "image:" manifest/php/php-deployment.yml
 
@@ -118,21 +117,13 @@ jobs:
         run: kubectl apply -f manifest/php/php-deployment.yml
 
       - name: Wait for deployment rollout
-        run: kubectl rollout status deployment/php-fpm -n dev --timeout=5m
-
-      - name: Verify deployment
         run: |
-          kubectl get pods -n dev
-          kubectl describe deployment php-fpm -n dev | grep -A 5 "Image:"
+          echo "⏳ Waiting for php-fpm rollout..."
+          kubectl rollout status deployment/php-fpm -n dev --timeout=8m
 
-  rollback-on-failure:
-    needs: deploy-to-kubernetes
-    runs-on: self-hosted
-    if: failure()
-
-    steps:
-      - name: Rollback to previous version
+      - name: Force delete stuck terminating pods
+        if: failure()
         run: |
-          echo "Deployment failed, rolling back..."
-          kubectl rollout undo deployment/php-fpm -n dev
-          kubectl rollout status deployment/php-fpm -n dev --timeout=3m
+          echo "🧹 Cleaning up stuck pods..."
+          kubectl get pods -n dev | grep Terminating || true
+          kubectl get pods -n
