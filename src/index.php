@@ -206,7 +206,7 @@ $posts_result = $posts_query->get_result();
 <body>
     <div class="container">
         <header>
-            <div class="logo">📝 Simple Blog (PHP 8.7) Updated Limit 3 Images (Test New 4)</div>
+            <div class="logo">📝 Simple Blog (PHP 8.7) Updated Limit 3 Images (Test New 5)</div>
             <div class="tagline">Sharing thoughts, one post at a time</div>
         </header>
         
